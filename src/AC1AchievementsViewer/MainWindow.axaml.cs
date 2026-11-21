@@ -78,7 +78,8 @@ public partial class MainWindow : Window
             currentWriteTime = info.LastWriteTime;
             currentSize = info.Length;
             settings.LastSave = path;
-            StatusLine.Text = $"{Path.GetFileName(path)}, saved {info.LastWriteTime:g}. The list updates when the game saves.";
+            var note = (SaveCombo.SelectedItem as SaveEntry)?.NameNote;
+            StatusLine.Text = $"{Path.GetFileName(path)}, saved {info.LastWriteTime:g}. Name: {note}. The list updates when the game saves.";
         }
         catch (Exception ex)
         {

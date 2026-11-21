@@ -13,6 +13,9 @@ public class SaveEntry
     /// <summary>The name the player gave the save in game (from the .hdr file next to the .sav), or null.</summary>
     public string? GameName { get; init; }
 
+    /// <summary>Which .hdr was read, or why none was (shown in the status line to find problems).</summary>
+    public string NameNote { get; init; } = "";
+
     /// <summary>The in-game name from the .hdr file; the file name only when there is no readable .hdr.</summary>
     public string Display =>
         !string.IsNullOrWhiteSpace(GameName) ? GameName : System.IO.Path.GetFileNameWithoutExtension(Path);
@@ -57,13 +60,14 @@ public static class SaveLocator
     /// The .hdr next to the save holds an int32 character count followed by that many UTF-16 characters
     /// (bytes 03 00 00 00 41 00 6E 00 79 00 = "Any"). It is found by the number after the dash in the file name.
     /// </summary>
-    private static string? ReadGameName(string savePath)
+    private static string? ReadGameName(string savePath, out string note)
     {
+        note = "no .hdr found";
         try
         {
             var name = Path.GetFileNameWithoutExtension(savePath);
             int dash = name.LastIndexOf('-');
-            if (dash < 0) return null;
+            if (dash < 0) { note = "file name has no dash"; return null; }
             string ending = name[dash..] + ".hdr";   // "-1774900138.hdr"
             var folder = Path.GetDirectoryName(Path.GetFullPath(savePath))!;
 
@@ -71,19 +75,20 @@ public static class SaveLocator
             {
                 if (!hdr.EndsWith(ending, StringComparison.OrdinalIgnoreCase)) continue;
                 var bytes = File.ReadAllBytes(hdr);
-                if (bytes.Length < 6) continue;
+                if (bytes.Length < 6) { note = $"{Path.GetFileName(hdr)} is too short"; continue; }
 
                 int count = BitConverter.ToInt32(bytes, 0);
                 string text = count > 0 && 4 + count * 2 <= bytes.Length
                     ? System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2)
                     : System.Text.Encoding.Unicode.GetString(bytes, 4, (bytes.Length - 4) / 2 * 2);
                 text = text.TrimEnd('\0').Trim();
-                if (text.Length > 0) return text;
+                if (text.Length > 0) { note = $"name from {Path.GetFileName(hdr)}"; return text; }
+                note = $"{Path.GetFileName(hdr)} has no text";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // No readable .hdr: the list falls back to the file name.
+            note = $"could not read .hdr: {ex.Message}";
         }
         return null;
     }
@@ -107,7 +112,10 @@ public static class SaveLocator
         try
         {
             foreach (var file in Directory.GetFiles(folder, "*.sav"))
-                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file), Unlocked = CountUnlocked(file), GameName = ReadGameName(file) });
+            {
+                var gameName = ReadGameName(file, out var note);
+                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file), Unlocked = CountUnlocked(file), GameName = gameName, NameNote = note });
+            }
         }
         catch
         {

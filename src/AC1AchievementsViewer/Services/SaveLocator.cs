@@ -1,4 +1,5 @@
 using System.IO;
+using AcSaveLib.Games.Ac1;
 
 namespace AC1AchievementsViewer.Services;
 
@@ -7,7 +8,26 @@ public class SaveEntry
 {
     public string Path { get; init; } = "";
     public DateTime LastWrite { get; init; }
-    public string Display => $"{System.IO.Path.GetFileName(Path)}   ({LastWrite:g})";
+    public int? Unlocked { get; init; }
+
+    /// <summary>
+    /// The save file holds no name, only numbers. Its file name looks like "45220571-1774900138.sav";
+    /// the second number is a Unix time (when the save was created), so that is shown instead of the cryptic name.
+    /// </summary>
+    public string Display
+    {
+        get
+        {
+            var name = System.IO.Path.GetFileNameWithoutExtension(Path);
+            string text = name;
+            int dash = name.LastIndexOf('-');
+            if (dash >= 0 && long.TryParse(name[(dash + 1)..], out var unix) && unix > 1_000_000_000 && unix < 4_000_000_000)
+                text = $"Started {DateTimeOffset.FromUnixTimeSeconds(unix).LocalDateTime:g}";
+            text += $"   last saved {LastWrite:g}";
+            if (Unlocked != null) text += $"   {Unlocked}/44";
+            return text;
+        }
+    }
 }
 
 /// <summary>Finds the folder with the game's saves and lists the saves in it.</summary>
@@ -45,6 +65,18 @@ public static class SaveLocator
             yield return Path.Combine(root, "steamapps", "compatdata", SteamAppId, inPrefix);
     }
 
+    private static int? CountUnlocked(string file)
+    {
+        try
+        {
+            return Ac1SaveFile.Load(file).Accomplishments().Count(a => a.Config == 1 && a.Completed);
+        }
+        catch
+        {
+            return null;   // not an AC1 save, or the game is writing it right now
+        }
+    }
+
     /// <summary>All .sav files of a folder, newest first.</summary>
     public static List<SaveEntry> ListSaves(string folder)
     {
@@ -52,7 +84,7 @@ public static class SaveLocator
         try
         {
             foreach (var file in Directory.GetFiles(folder, "*.sav"))
-                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file) });
+                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file), Unlocked = CountUnlocked(file) });
         }
         catch
         {

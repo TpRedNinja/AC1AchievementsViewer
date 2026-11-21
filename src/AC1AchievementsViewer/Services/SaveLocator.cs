@@ -53,7 +53,10 @@ public static class SaveLocator
             yield return Path.Combine(root, "steamapps", "compatdata", SteamAppId, inPrefix);
     }
 
-    /// <summary>The .hdr holds an int32 character count followed by that many UTF-16 characters.</summary>
+    /// <summary>
+    /// The .hdr next to the save holds an int32 character count followed by that many UTF-16 characters
+    /// (bytes 03 00 00 00 41 00 6E 00 79 00 = "Any"). It is found by the number after the dash in the file name.
+    /// </summary>
     private static string? ReadGameName(string savePath)
     {
         try
@@ -61,20 +64,26 @@ public static class SaveLocator
             var name = Path.GetFileNameWithoutExtension(savePath);
             int dash = name.LastIndexOf('-');
             if (dash < 0) return null;
-            string suffix = name[dash..];   // "-1774900138"
-            var folder = Path.GetDirectoryName(savePath)!;
-            foreach (var hdr in Directory.GetFiles(folder, "*" + suffix + ".hdr"))
+            string ending = name[dash..] + ".hdr";   // "-1774900138.hdr"
+            var folder = Path.GetDirectoryName(Path.GetFullPath(savePath))!;
+
+            foreach (var hdr in Directory.EnumerateFiles(folder))
             {
+                if (!hdr.EndsWith(ending, StringComparison.OrdinalIgnoreCase)) continue;
                 var bytes = File.ReadAllBytes(hdr);
-                if (bytes.Length < 4) continue;
+                if (bytes.Length < 6) continue;
+
                 int count = BitConverter.ToInt32(bytes, 0);
-                if (count <= 0 || 4 + count * 2 > bytes.Length) continue;
-                return System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2);
+                string text = count > 0 && 4 + count * 2 <= bytes.Length
+                    ? System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2)
+                    : System.Text.Encoding.Unicode.GetString(bytes, 4, (bytes.Length - 4) / 2 * 2);
+                text = text.TrimEnd('\0').Trim();
+                if (text.Length > 0) return text;
             }
         }
         catch
         {
-            // No readable .hdr: the list falls back to the date.
+            // No readable .hdr: the list falls back to the file name.
         }
         return null;
     }

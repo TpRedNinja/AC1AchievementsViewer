@@ -10,9 +10,13 @@ public class SaveEntry
     public DateTime LastWrite { get; init; }
     public int? Unlocked { get; init; }
 
+    /// <summary>The name the player gave the save in game (from the .hdr file next to the .sav), or null.</summary>
+    public string? GameName { get; init; }
+
     /// <summary>
-    /// The save file holds no name, only numbers. Its file name looks like "45220571-1774900138.sav";
-    /// the second number is a Unix time (when the save was created), so that is shown instead of the cryptic name.
+    /// The in-game name is stored in a small .hdr file with the same number after the dash
+    /// ("1be623aa-1774900138.hdr" belongs to "45220571-1774900138.sav"). Without it, the second number of the
+    /// file name (a Unix time, when the save was created) is shown instead of the cryptic name.
     /// </summary>
     public string Display
     {
@@ -23,6 +27,7 @@ public class SaveEntry
             int dash = name.LastIndexOf('-');
             if (dash >= 0 && long.TryParse(name[(dash + 1)..], out var unix) && unix > 1_000_000_000 && unix < 4_000_000_000)
                 text = $"Started {DateTimeOffset.FromUnixTimeSeconds(unix).LocalDateTime:g}";
+            if (!string.IsNullOrWhiteSpace(GameName)) text = $"{GameName}   ({text})";
             text += $"   last saved {LastWrite:g}";
             if (Unlocked != null) text += $"   {Unlocked}/44";
             return text;
@@ -65,6 +70,32 @@ public static class SaveLocator
             yield return Path.Combine(root, "steamapps", "compatdata", SteamAppId, inPrefix);
     }
 
+    /// <summary>The .hdr holds an int32 character count followed by that many UTF-16 characters.</summary>
+    private static string? ReadGameName(string savePath)
+    {
+        try
+        {
+            var name = Path.GetFileNameWithoutExtension(savePath);
+            int dash = name.LastIndexOf('-');
+            if (dash < 0) return null;
+            string suffix = name[dash..];   // "-1774900138"
+            var folder = Path.GetDirectoryName(savePath)!;
+            foreach (var hdr in Directory.GetFiles(folder, "*" + suffix + ".hdr"))
+            {
+                var bytes = File.ReadAllBytes(hdr);
+                if (bytes.Length < 4) continue;
+                int count = BitConverter.ToInt32(bytes, 0);
+                if (count <= 0 || 4 + count * 2 > bytes.Length) continue;
+                return System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2);
+            }
+        }
+        catch
+        {
+            // No readable .hdr: the list falls back to the date.
+        }
+        return null;
+    }
+
     private static int? CountUnlocked(string file)
     {
         try
@@ -84,7 +115,7 @@ public static class SaveLocator
         try
         {
             foreach (var file in Directory.GetFiles(folder, "*.sav"))
-                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file), Unlocked = CountUnlocked(file) });
+                result.Add(new SaveEntry { Path = file, LastWrite = File.GetLastWriteTime(file), Unlocked = CountUnlocked(file), GameName = ReadGameName(file) });
         }
         catch
         {

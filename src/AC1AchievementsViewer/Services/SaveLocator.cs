@@ -16,9 +16,16 @@ public class SaveEntry
     /// <summary>Which .hdr was read, or why none was (shown in the status line to find problems).</summary>
     public string NameNote { get; init; } = "";
 
-    /// <summary>The in-game name from the .hdr file; the file name only when there is no readable .hdr.</summary>
-    public string Display =>
-        !string.IsNullOrWhiteSpace(GameName) ? GameName : System.IO.Path.GetFileNameWithoutExtension(Path);
+    /// <summary>The in-game name with the number of unlocked achievements. Only the file name if no name was found.</summary>
+    public string Display
+    {
+        get
+        {
+            string text = !string.IsNullOrWhiteSpace(GameName) ? GameName : System.IO.Path.GetFileNameWithoutExtension(Path);
+            if (Unlocked != null) text += $"   {Unlocked}/44";
+            return text;
+        }
+    }
 }
 
 /// <summary>Finds the folder with the game's saves and lists the saves in it.</summary>
@@ -57,40 +64,32 @@ public static class SaveLocator
     }
 
     /// <summary>
-    /// The .hdr next to the save holds an int32 character count followed by that many UTF-16 characters
-    /// (bytes 03 00 00 00 41 00 6E 00 79 00 = "Any"). It is found by the number after the dash in the file name.
+    /// The save name is in the .hdr with the same file name as the save ("1774900138.sav" -> "1774900138.hdr").
+    /// It holds an int32 character count followed by that many UTF-16 characters (03 00 00 00 41 00 6E 00 79 00 = "Any").
     /// </summary>
     private static string? ReadGameName(string savePath, out string note)
     {
         note = "no .hdr found";
         try
         {
-            var name = Path.GetFileNameWithoutExtension(savePath);
-            int dash = name.LastIndexOf('-');
-            if (dash < 0) { note = "file name has no dash"; return null; }
-            string ending = name[dash..] + ".hdr";   // "-1774900138.hdr"
-            var folder = Path.GetDirectoryName(Path.GetFullPath(savePath))!;
+            var hdr = Path.ChangeExtension(savePath, ".hdr");
+            if (!File.Exists(hdr)) { note = $"{Path.GetFileName(hdr)} does not exist"; return null; }
 
-            foreach (var hdr in Directory.EnumerateFiles(folder))
-            {
-                if (!hdr.EndsWith(ending, StringComparison.OrdinalIgnoreCase)) continue;
-                var bytes = File.ReadAllBytes(hdr);
-                if (bytes.Length < 6) { note = $"{Path.GetFileName(hdr)} is too short"; continue; }
+            var bytes = File.ReadAllBytes(hdr);
+            if (bytes.Length < 6) { note = $"{Path.GetFileName(hdr)} is too short"; return null; }
 
-                int count = BitConverter.ToInt32(bytes, 0);
-                string text = count > 0 && 4 + count * 2 <= bytes.Length
-                    ? System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2)
-                    : System.Text.Encoding.Unicode.GetString(bytes, 4, (bytes.Length - 4) / 2 * 2);
-                text = text.TrimEnd('\0').Trim();
-                if (text.Length > 0) { note = $"name from {Path.GetFileName(hdr)}"; return text; }
-                note = $"{Path.GetFileName(hdr)} has no text";
-            }
+            int count = BitConverter.ToInt32(bytes, 0);
+            if (count <= 0 || 4 + count * 2 > bytes.Length) { note = $"{Path.GetFileName(hdr)} has a bad length"; return null; }
+
+            var text = System.Text.Encoding.Unicode.GetString(bytes, 4, count * 2).Trim('\0', ' ');
+            note = $"name from {Path.GetFileName(hdr)}";
+            return text.Length > 0 ? text : null;
         }
         catch (Exception ex)
         {
             note = $"could not read .hdr: {ex.Message}";
+            return null;
         }
-        return null;
     }
 
     private static int? CountUnlocked(string file)

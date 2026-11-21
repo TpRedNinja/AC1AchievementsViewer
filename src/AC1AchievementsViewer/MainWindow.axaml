@@ -6,8 +6,14 @@
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <ComboBox x:Name="SaveCombo" Width="330" PlaceholderText="No saves found"
-                          SelectionChanged="SaveCombo_SelectionChanged" />
+                <ComboBox x:Name="SaveCombo" Width="520" PlaceholderText="No saves found"
+                          SelectionChanged="SaveCombo_SelectionChanged">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <Button x:Name="BrowseFolderButton" Content="Browse folder..." Click="BrowseFolderButton_Click" />
                 <Button x:Name="OpenSaveButton" Content="Open save..." Click="OpenSaveButton_Click" />
                 <ComboBox x:Name="LanguageCombo" Width="130" SelectionChanged="LanguageCombo_SelectionChanged" />

@@ -13,26 +13,9 @@ public class SaveEntry
     /// <summary>The name the player gave the save in game (from the .hdr file next to the .sav), or null.</summary>
     public string? GameName { get; init; }
 
-    /// <summary>
-    /// The in-game name is stored in a small .hdr file with the same number after the dash
-    /// ("1be623aa-1774900138.hdr" belongs to "45220571-1774900138.sav"). Without it, the second number of the
-    /// file name (a Unix time, when the save was created) is shown instead of the cryptic name.
-    /// </summary>
-    public string Display
-    {
-        get
-        {
-            var name = System.IO.Path.GetFileNameWithoutExtension(Path);
-            string text = name;
-            int dash = name.LastIndexOf('-');
-            if (dash >= 0 && long.TryParse(name[(dash + 1)..], out var unix) && unix > 1_000_000_000 && unix < 4_000_000_000)
-                text = $"Started {DateTimeOffset.FromUnixTimeSeconds(unix).LocalDateTime:g}";
-            if (!string.IsNullOrWhiteSpace(GameName)) text = $"{GameName}   ({text})";
-            text += $"   last saved {LastWrite:g}";
-            if (Unlocked != null) text += $"   {Unlocked}/44";
-            return text;
-        }
-    }
+    /// <summary>The in-game name from the .hdr file; the file name only when there is no readable .hdr.</summary>
+    public string Display =>
+        !string.IsNullOrWhiteSpace(GameName) ? GameName : System.IO.Path.GetFileNameWithoutExtension(Path);
 }
 
 /// <summary>Finds the folder with the game's saves and lists the saves in it.</summary>

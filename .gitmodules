@@ -1,0 +1,3 @@
+[submodule "external/ACSaveLib"]
+	path = external/ACSaveLib
+	url = https://github.com/TpRedNinja/ACSaveLib

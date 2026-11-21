@@ -22,7 +22,7 @@ public class SaveEntry
         get
         {
             string text = !string.IsNullOrWhiteSpace(GameName) ? GameName : System.IO.Path.GetFileNameWithoutExtension(Path);
-            if (Unlocked != null) text += $"   {Unlocked}/44";
+            //if (Unlocked != null) text += $" {Unlocked}/44";
             return text;
         }
     }
